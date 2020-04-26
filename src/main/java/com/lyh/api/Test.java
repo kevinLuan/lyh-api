@@ -90,16 +90,24 @@ public class Test {
     Graph graph = new Graph();
     graph.importGraphDef(graphDef);
     Session tfSession = new Session(graph);
+    for (int i = 0; i < 10; i++) {
+      callTensoflow(graph, tfSession);
+    }
+  }
+
+  private static void callTensoflow(Graph graph, Session tfSession) {
     long start = System.currentTimeMillis();
     Operation operationPredict = graph.operation("out");//要执行的op
     Output output = operationPredict.output(0);
-    int[][] array = new int[2][380];
+    int[][] array = new int[3][380];
     array[0] = new int[380];
     array[1] = new int[380];
+    array[2] = new int[380];
     Tensor input_x = Tensor.create(array);
-    float[][] input_y1 = new float[2][380];
+    float[][] input_y1 = new float[3][380];
     input_y1[0] = new float[380];
     input_y1[1] = new float[380];
+    input_y1[2] = new float[380];
     Tensor input_y = Tensor.create(input_y1);
     List<Tensor<?>> out = tfSession.runner().feed("feat_index", input_x)
         .feed("feat_value", input_y)
@@ -108,7 +116,7 @@ public class Test {
         .fetch(output).run();
     System.out.println(new Gson().toJson(out));
     for (Tensor s : out) {
-      float[][] t = new float[2][1];
+      float[][] t = new float[(int) s.shape()[0]][1];
       s.copyTo(t);
       for (int i = 0; i < t.length; i++) {
         for (int j = 0; j < t[i].length; j++) {
