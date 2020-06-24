@@ -21,21 +21,40 @@ public class ShardingLoadBalance implements LoadBalance {
   private RandomLoadBalance lackLoadBalance = null;
   private List<Provider> providers;
 
-  public static ShardingLoadBalance of(List<Provider> providers) {
-    ShardingLoadBalance nodeLoop = new ShardingLoadBalance();
-    nodeLoop.providers = providers;
+  private ShardingLoadBalance(List<Provider> providers) {
+    if (providers == null || providers.isEmpty()) {
+      throw new IllegalArgumentException("`providers`不能为空");
+    }
+    this.providers = Collections.unmodifiableList(providers);
+    this.isAvg = providers.size() % loopMax == 0;
+    this.init();
+  }
+
+  private void init() {
     int providerPos = 0;
     if (providers.size() >= loopMax) {
       int loop = providers.size() / loopMax;
-      nodeLoop.initOkLoop(providers, loop * loopMax);
+      initLoop(providers, loop * loopMax);
       providerPos = loop * loopMax;
     }
-    nodeLoop.isAvg = providers.size() % loopMax == 0;
-    if (!nodeLoop.isAvg) {
+    if (!isAvg) {
       List<Provider> lastProviderList = providers.subList(providerPos, providers.size());
-      nodeLoop.lackLoadBalance = RandomLoadBalance.of(lastProviderList);
+      lackLoadBalance = RandomLoadBalance.of(lastProviderList);
     }
-    return nodeLoop;
+  }
+
+  private void initLoop(List<Provider> providers, int maxSize) {
+    for (int i = 0; i < maxSize; i++) {
+      int key = i % loopMax;
+      if (!loop.containsKey(key)) {
+        loop.putIfAbsent(key, Collections.synchronizedList(new LinkedList<>()));
+      }
+      loop.get(key).add(providers.get(i));
+    }
+  }
+
+  public static ShardingLoadBalance of(List<Provider> providers) {
+    return new ShardingLoadBalance(providers);
   }
 
   public Provider balance(int dbIndex) {
@@ -52,15 +71,6 @@ public class ShardingLoadBalance implements LoadBalance {
     }
   }
 
-  private void initOkLoop(List<Provider> providers, int maxSize) {
-    for (int i = 0; i < maxSize; i++) {
-      int key = i % loopMax;
-      if (!loop.containsKey(key)) {
-        loop.putIfAbsent(key, Collections.synchronizedList(new LinkedList<>()));
-      }
-      loop.get(key).add(providers.get(i));
-    }
-  }
 
   @Override
   public long dump(PrintStream out) {
