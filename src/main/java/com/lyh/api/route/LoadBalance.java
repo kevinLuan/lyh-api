@@ -1,5 +1,7 @@
 package com.lyh.api.route;
 
+import java.io.PrintStream;
+
 public interface LoadBalance {
 
   //sharding 库的数量
@@ -13,5 +15,9 @@ public interface LoadBalance {
    */
   Provider balance(int dbIndex);
 
-  long dump();
+  long dump(PrintStream out);
+
+  LowHighPair statLoad();
+
+  int getProviderSize();
 }

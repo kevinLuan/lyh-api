@@ -1,8 +1,10 @@
 package com.lyh.api.route;
 
+import java.io.PrintStream;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadLocalRandom;
 import lombok.SneakyThrows;
 import org.junit.Assert;
 import org.junit.Test;
@@ -21,52 +23,64 @@ public class TestLoadBalance {
   @SneakyThrows
   public void testLoadBalance30() {
     List<Provider> providers = createProviderList(30);
-    LoadBalance loadBalance = LoadBalanceApi.loadBalance(providers);
-    this.testLoadTest(loadBalance);
+    this.testLoadTest(ShardingLoadBalance.of(providers), System.out);
   }
 
 
   @Test
   @SneakyThrows
   public void testLoadBalance32() {
-    List<Provider> providers = createProviderList(64);
-    LoadBalance loadBalance = LoadBalanceApi.loadBalance(providers);
-    this.testLoadTest(loadBalance);
+    List<Provider> providers = createProviderList(32);
+    this.testLoadTest(ShardingLoadBalance.of(providers), System.out);
   }
 
   @Test
   @SneakyThrows
-  public void testLoadBalance60() {
-    List<Provider> providers = createProviderList(60);
-    LoadBalance loadBalance = LoadBalanceApi.loadBalance(providers);
-    this.testLoadTest(loadBalance);
+  public void testLoadBalance285() {
+    List<Provider> providers = createProviderList(285);
+    this.testLoadTest(ShardingLoadBalance.of(providers), System.out);
+  }
+
+  @Test
+  @SneakyThrows
+  public void testLoadBalance() {
+    for (int i = 1; i < 1000; i++) {
+      List<Provider> providers = createProviderList(i);
+      this.testLoadTest(ShardingLoadBalance.of(providers), null);
+    }
   }
 
   @Test
   @SneakyThrows
   public void testLoadBalance64() {
     List<Provider> providers = createProviderList(64);
-    LoadBalance loadBalance = LoadBalanceApi.loadBalance(providers);
-    this.testLoadTest(loadBalance);
+    this.testLoadTest(ShardingLoadBalance.of(providers), System.out);
   }
 
   @SneakyThrows
-  private void testLoadTest(LoadBalance loadBalance) {
-    CountDownLatch latch = new CountDownLatch(100);
-    for (int t = 0; t < 100; t++) {
+  private void testLoadTest(LoadBalance loadBalance, PrintStream out) {
+    CountDownLatch latch = new CountDownLatch(10);
+    for (int t = 0; t < 10; t++) {
       new Thread(() -> {
-        long start = System.currentTimeMillis();
-        for (int i = 0; i < 10000; i++) {
-          Provider provider = loadBalance.balance(i % LoadBalance.loopMax).use();
+        for (int i = 0; i < 100000; i++) {
+          int dbIndex = ThreadLocalRandom.current().nextInt(LoadBalance.loopMax);
+          Provider provider = loadBalance.balance(dbIndex).use();
           if (provider == null) {
             throw new IllegalArgumentException("负载均衡计算失败");
           }
         }
         latch.countDown();
-        System.out.println("耗时:" + (System.currentTimeMillis() - start));
       }).start();
     }
     latch.await();
-    Assert.assertEquals(1000000, loadBalance.dump());
+    Assert.assertEquals(1000000, loadBalance.dump(out));
+    LowHighPair pair = loadBalance.statLoad();
+    if (pair.calcRatio() < 0.85f) {
+      System.out.println("------------------------------------------");
+      System.out.println(
+          loadBalance.getProviderSize() + "  load ratio==>>" + pair.calcRatio() + " " + pair.getLow() + "~" + pair
+              .getHigh());
+    }
+    Assert.assertTrue(pair.calcRatio() >= 0.75f);
   }
 }
